@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Siliwangi Grub Cashflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* Ganti font: ubah --font di bawah (dan link Google Fonts di atas) */
+:root{--font:"Bricolage Grotesque",system-ui,sans-serif;--bg:#f3f6f8;--panel:#fff;--ink:#14232e;--mut:#5d6f7c;--line:#d5dde3;--ac:#0a6c8a;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1a22;--panel:#12222d;--ink:#e8eef2;--mut:#8fa3b0;--line:#24394a;--ac:#4cc3e6;--bad:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--font);font-variant-numeric:tabular-nums}
+main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+section{padding:18px 0;border-top:1px solid var(--line)}
+h1{margin:0;font-size:22px;font-weight:800}
+h2{margin:0 0 8px;font-size:17px;font-weight:600}
+p{margin:0}
+.mut{color:var(--mut);font-size:14px}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding-bottom:18px}
+.big{font-size:clamp(36px,11vw,58px);font-weight:800;letter-spacing:-.02em;color:var(--ac);line-height:1.1}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font-weight:400;color:var(--mut);font-size:14px}
+th,td{padding:8px 4px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+input,select,textarea,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);max-width:100%}
+button{background:var(--ac);color:var(--bg);border:0;cursor:pointer;font-weight:600}
+button.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.del{background:transparent;color:var(--bad);border:1px solid var(--line)}
+td .sec,td .del{padding:6px 10px;font-size:14px}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.full{grid-column:1/-1}
+.inline{display:flex;gap:8px;padding-bottom:18px}
+.hide{display:none!important}
+#msg{color:var(--bad);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+ <header class="top">
+  <div><h1 id="judul">Siliwangi Grub Cashflow</h1><p class="mut" id="sub"></p></div>
+  <button class="sec" id="btnAdmin">Admin</button>
+ </header>
+ <form id="login" class="inline hide"><input type="password" id="pin" placeholder="PIN admin" autocomplete="current-password"><button>Masuk</button></form>
+ <section><p class="mut">Total terkumpul</p><p class="big" id="total">Rp 0</p></section>
+ <section><h2>Per bulan</h2><div class="scroll"><table><thead><tr><th>Bulan</th><th>Setoran</th><th>Akumulasi</th></tr></thead><tbody id="bulan"></tbody></table></div></section>
+ <section><h2>Per pasangan</h2><div class="scroll"><table><thead><tr><th>Pasangan</th><th>Setor</th><th>Total</th></tr></thead><tbody id="pas"></tbody></table></div></section>
+ <section id="adm" class="hide">
+  <h2 id="fTitle">Tambah setoran</h2>
+  <div class="form">
+   <input type="date" id="fTgl" aria-label="Tanggal setoran">
+   <select id="fPas" aria-label="Pasangan"></select>
+   <input type="number" id="fJml" class="full" min="1" step="1000" inputmode="numeric" placeholder="Jumlah setoran (Rp)">
+   <button id="fSave" class="full">Simpan setoran</button>
+   <button id="fCancel" class="sec full hide">Batal edit</button>
+  </div>
+  <h2 style="margin-top:22px">Pengaturan</h2>
+  <div class="form">
+   <input id="sJudul" aria-label="Judul">
+   <input id="sTahun" type="number" aria-label="Tahun">
+   <p class="mut full">Nama pasangan, satu per baris. Ganti nama saja, jangan ubah urutan.</p>
+   <textarea id="sNama" rows="7" class="full" aria-label="Nama pasangan"></textarea>
+   <button id="sSave" class="full">Simpan pengaturan</button>
+   <button id="logout" class="sec full">Keluar dari admin</button>
+  </div>
+ </section>
+ <section><h2>Riwayat setoran</h2><div class="scroll"><table><tbody id="riwayat"></tbody></table></div></section>
+ <p id="msg" role="status"></p>
+</main>
+<script>
+const API="/api/data",BLN=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const $=id=>document.getElementById(id);
+const rp=n=>"Rp "+Math.round(n).toLocaleString("id-ID");
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tglID=t=>{const[y,m,d]=t.split("-");return +d+" "+BLN[m-1].slice(0,3)+" "+y};
+const hariIni=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+let D={judul:"Siliwangi Grub Cashflow",tahun:new Date().getFullYear(),pasangan:[],setoran:[]},pin="",editId=null;
+const msg=t=>{$("msg").textContent=t||""};
+const post=body=>fetch(API,{method:"POST",headers:{"content-type":"application/json","x-pin":pin},body:JSON.stringify(body)}).catch(()=>null);
+
+async function load(){
+ try{const r=await fetch(API,{cache:"no-store"});if(!r.ok)throw 0;D=await r.json()}
+ catch{msg("Data belum bisa dimuat. Cek apakah situs sudah di-deploy di Netlify.")}
+ render();
+}
+async function save(){
+ const r=await post(D);
+ if(r&&r.ok){msg();return true}
+ msg(r&&r.status==401?"PIN salah atau ADMIN_PIN belum diisi di Netlify.":"Gagal menyimpan. Coba lagi.");
+ if(r&&r.status==401)pin="";
+ await load();
+ return false;
+}
+function render(){
+ const adm=!!pin,S=D.setoran.filter(s=>s.tgl.startsWith(D.tahun+"-")).sort((a,b)=>b.tgl.localeCompare(a.tgl));
+ document.title=D.judul;$("judul").textContent=D.judul;
+ $("sub").textContent="Tabungan liburan bersama, tahun "+D.tahun+". Setoran tiap Jumat.";
+ $("btnAdmin").classList.toggle("hide",adm);$("adm").classList.toggle("hide",!adm);
+ $("total").textContent=rp(S.reduce((a,s)=>a+s.jml,0));
+ const m=Array(12).fill(0);S.forEach(s=>m[+s.tgl.slice(5,7)-1]+=s.jml);
+ let acc=0;
+ $("bulan").innerHTML=m.map((v,i)=>(acc+=v,`<tr><td>${BLN[i]}</td><td>${rp(v)}</td><td>${rp(acc)}</td></tr>`)).join("");
+ $("pas").innerHTML=D.pasangan.map((n,i)=>{const t=S.filter(s=>s.p===i);return `<tr><td>${esc(n)}</td><td>${t.length}x</td><td>${rp(t.reduce((a,s)=>a+s.jml,0))}</td></tr>`}).join("");
+ $("riwayat").innerHTML=S.map(s=>`<tr><td>${tglID(s.tgl)}</td><td>${esc(D.pasangan[s.p]||"-")}</td><td>${rp(s.jml)}</td>${adm?`<td><button class="sec" data-e="${s.id}">Edit</button> <button class="del" data-d="${s.id}">Hapus</button></td>`:""}</tr>`).join("")||`<tr><td>Belum ada setoran. Masuk sebagai admin untuk menambah.</td></tr>`;
+ if(adm){
+  $("fPas").innerHTML=D.pasangan.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("");
+  $("sJudul").value=D.judul;$("sTahun").value=D.tahun;$("sNama").value=D.pasangan.join("\n");
+ }
+}
+function resetForm(){editId=null;$("fTitle").textContent="Tambah setoran";$("fTgl").value=hariIni();$("fJml").value="";$("fCancel").classList.add("hide")}
+
+$("btnAdmin").onclick=()=>{$("login").classList.toggle("hide");$("pin").focus()};
+$("login").onsubmit=async e=>{
+ e.preventDefault();pin=$("pin").value;
+ const r=await post({cek:1});
+ if(r&&r.ok){msg();$("login").classList.add("hide");$("pin").value="";resetForm();render()}
+ else{pin="";msg(r&&r.status==401?"PIN salah atau ADMIN_PIN belum diisi di Netlify.":"Tidak bisa terhubung ke server.")}
+};
+$("logout").onclick=()=>{pin="";render()};
+$("fCancel").onclick=resetForm;
+$("fSave").onclick=async()=>{
+ const tgl=$("fTgl").value,p=+$("fPas").value,jml=+$("fJml").value;
+ if(!tgl||!(jml>0))return msg("Isi tanggal dan jumlah setoran.");
+ if(editId)Object.assign(D.setoran.find(x=>x.id===editId),{tgl,p,jml});
+ else D.setoran.push({id:Date.now().toString(36),tgl,p,jml});
+ if(await save())resetForm();
+ render();
+};
+$("sSave").onclick=async()=>{
+ D.judul=$("sJudul").value.trim()||D.judul;D.tahun=parseInt($("sTahun").value)||D.tahun;
+ D.pasangan=$("sNama").value.split("\n").map(x=>x.trim()).filter(Boolean);
+ await save();render();
+};
+$("riwayat").onclick=async e=>{
+ const b=e.target.closest("button");if(!b)return;
+ if(b.dataset.d){
+  if(!confirm("Hapus setoran ini?"))return;
+  D.setoran=D.setoran.filter(x=>x.id!==b.dataset.d);await save();render();
+ }else{
+  const s=D.setoran.find(x=>x.id===b.dataset.e);
+  editId=s.id;$("fTgl").value=s.tgl;$("fPas").value=s.p;$("fJml").value=s.jml;
+  $("fTitle").textContent="Edit setoran";$("fCancel").classList.remove("hide");$("adm").scrollIntoView();
+ }
+};
+resetForm();load();
+</script>
+</body>
+</html>
